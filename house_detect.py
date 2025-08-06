@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-MODEL_PATH = 'exp3/weights/best.onnx'
+MODEL_PATH = 'houses-model/best.onnx'
 CLASS_NAMES = ['SingularHouse', 'ApartmentComplex']
 CONFIDENCE_THRESHOLD = 0.3
 NMS_THRESHOLD = 0.45

@@ -84,8 +84,7 @@ def draw_area(frame, rvec, tvec, rectangle_3d, camera_matrix, dist_coeffs):
     return frame
 
 if __name__ == "__main__":
-    url = "http://192.168.0.11:4747/video"
-    grabber = FrameGrabber(url)
+    grabber = FrameGrabber()
 
     data = np.load("camera_calibration.npz")
     camera_matrix = data["camera_matrix"]

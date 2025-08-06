@@ -5,8 +5,7 @@ from frame_grabber import FrameGrabber
 
 model = YOLO("path-model/best.pt")  
 
-url = "http://192.168.0.19:4747/video"
-grabber = FrameGrabber(url)
+grabber = FrameGrabber()
 
 while True:
     frame = grabber.read()

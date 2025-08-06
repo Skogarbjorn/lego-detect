@@ -1,8 +1,10 @@
 import cv2
 import threading
 
+url = "http://192.168.0.19:4747/video"
+
 class FrameGrabber:
-    def __init__(self, src):
+    def __init__(self, src=url):
         self.cap = cv2.VideoCapture(src)
         self.lock = threading.Lock()
         self.latest_frame = None

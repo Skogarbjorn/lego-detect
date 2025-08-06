@@ -78,7 +78,6 @@ class Detector:
             export_data["area"] = rectangle_3d.tolist()
 
             with open("data.json", "w") as f:
-                print("exporting!")
                 json.dump(export_data, f, indent=2)
 
         frame = draw_area(frame, rvec, tvec, rectangle_3d, camera_matrix, dist_coeffs)

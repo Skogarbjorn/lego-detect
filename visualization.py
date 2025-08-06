@@ -33,8 +33,9 @@ def draw_area(canvas, area):
 
 def draw_houses(canvas, houses):
     for house in houses:
-        cx, cy, _ = house['center']
         c1, c2, c3, c4 = house['corners']
+        cx = (c1[0] + c2[0] + c3[0] + c4[0]) / 4
+        cy = (c1[1] + c2[1] + c3[1] + c4[1]) / 4
         scx, scy = scale_point(cx, cy)
         r = 5
         canvas.create_oval(scx - r, scy - r, scx + r, scy + r, fill='red')
@@ -126,7 +127,6 @@ def done_annotation():
     update_sidebar()
     
     status_bar.config(text="Annotation completed")
-    print("\nAll annotations with names:")
     for i, shape in enumerate(shapes, 1):
         name = shape.get('name', f"Shape {i}")
         print(f"{name}")
@@ -245,8 +245,7 @@ def refresh_data():
     
     root.after(1000, refresh_data)
 
-url = "http://192.168.0.19:4747/video"
-grabber = FrameGrabber(url)
+grabber = FrameGrabber()
 detector = Detector()
 
 root = tk.Tk()
