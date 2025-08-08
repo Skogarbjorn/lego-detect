@@ -1,7 +1,9 @@
 import cv2
 import numpy as np
+import os
 
-MODEL_PATH = 'houses-model/best.onnx'
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(CURRENT_DIR, "..", "..", "models", "houses-model", "best.onnx")
 CLASS_NAMES = ['SingularHouse', 'ApartmentComplex']
 CONFIDENCE_THRESHOLD = 0.3
 NMS_THRESHOLD = 0.45

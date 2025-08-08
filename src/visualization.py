@@ -2,11 +2,12 @@ import tkinter as tk
 import cv2
 import json
 import os
-from detect import Detector
-from frame_grabber import FrameGrabber
+from detect.detect import Detector
+from lib.frame_grabber import FrameGrabber
 from PIL import Image, ImageTk
 
-JSON_FILE = "data.json"
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+RAW_JSON = os.path.join(CURRENT_DIR, "..", "output", "raw.json")
 
 CANVAS_WIDTH = 500
 CANVAS_HEIGHT = 500
@@ -43,7 +44,7 @@ def draw_houses(canvas, houses):
         canvas.create_text(scx + 10, scy, text=house['class'], anchor='w')
 
 def load_data():
-    with open(JSON_FILE, "r") as f:
+    with open(RAW_JSON, "r") as f:
         return json.load(f)
 
 
@@ -232,7 +233,7 @@ def refresh_data():
     global last_mtime
     
     try:
-        mtime = os.path.getmtime(JSON_FILE)
+        mtime = os.path.getmtime(RAW_JSON)
         if last_mtime is None or mtime != last_mtime:
             last_mtime = mtime
             data = load_data()

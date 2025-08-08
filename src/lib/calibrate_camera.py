@@ -1,3 +1,4 @@
+import os
 import cv2
 import numpy as np
 import glob
@@ -12,7 +13,11 @@ objpoints = []
 imgpoints = []
 image_size = None  
 
-images = glob.glob("calibration_images/*.png")
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+images_path = os.path.join(CURRENT_DIR, "..", "..", "misc", "calibration_images", "*.png")
+calibration_path = os.path.join(CURRENT_DIR, "..", "..", "misc", "camera_calibration.npz")
+
+images = glob.glob(images_path)
 
 for fname in images:
     img = cv2.imread(fname)
@@ -31,4 +36,4 @@ ret, camera_matrix, dist_coeffs, rvecs, tvecs = cv2.calibrateCamera(
     objpoints, imgpoints, image_size, None, None
 )
 
-np.savez("camera_calibration.npz", camera_matrix=camera_matrix, dist_coeffs=dist_coeffs)
+np.savez(calibration_path, camera_matrix=camera_matrix, dist_coeffs=dist_coeffs)

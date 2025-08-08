@@ -1,8 +1,9 @@
 import cv2
+import os
 import cv2.aruco as aruco
 import numpy as np
 
-from frame_grabber import FrameGrabber
+from lib.frame_grabber import FrameGrabber
 
 dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_250)
 parameters = cv2.aruco.DetectorParameters()
@@ -83,10 +84,13 @@ def draw_area(frame, rvec, tvec, rectangle_3d, camera_matrix, dist_coeffs):
     cv2.polylines(frame, [imgpts], isClosed=True, color=(0,255,0), thickness=2)
     return frame
 
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+camera_calibration_file = os.path.join(CURRENT_DIR, "..", "..", "misc", "camera_calibration.npz")
+
 if __name__ == "__main__":
     grabber = FrameGrabber()
 
-    data = np.load("camera_calibration.npz")
+    data = np.load(camera_calibration_file)
     camera_matrix = data["camera_matrix"]
     dist_coeffs = data["dist_coeffs"]
 

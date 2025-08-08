@@ -1,10 +1,13 @@
 import cv2
 import os
 from datetime import datetime
-from frame_grabber import FrameGrabber
+from lib.frame_grabber import FrameGrabber
 
 grabber = FrameGrabber()
-folder_path = "images/"
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+folder_path = os.path.join(CURRENT_DIR, "..", "..", "misc", "farmed_images")
+
 os.makedirs(folder_path, exist_ok=True) 
 
 while True:
@@ -18,7 +21,7 @@ while True:
     cv2.imshow('frame grabber cam', frame)
     key = cv2.waitKey(10) & 0xFF
     if key == 32:
-        cv2.imwrite(folder_path + filename, frame)
+        cv2.imwrite(os.path.join(folder_path, filename), frame)
     if key == 27:
         break
 

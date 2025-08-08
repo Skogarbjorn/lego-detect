@@ -1,9 +1,14 @@
 import json
 import numpy as np
-from house_detect import detect_houses, draw_houses, CLASS_NAMES
-from area_detect import detect_area, draw_area
+from detect.house_detect import detect_houses, draw_houses, CLASS_NAMES
+from detect.area_detect import detect_area, draw_area
+import os
 
-data = np.load("camera_calibration.npz")
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+RAW_JSON = os.path.join(CURRENT_DIR, "..", "..", "output", "raw.json")
+camera_calibration_file = os.path.join(CURRENT_DIR, "..", "..", "misc", "camera_calibration.npz")
+
+data = np.load(camera_calibration_file)
 camera_matrix = data["camera_matrix"]
 dist_coeffs = data["dist_coeffs"]
 
@@ -77,7 +82,7 @@ class Detector:
 
             export_data["area"] = rectangle_3d.tolist()
 
-            with open("data.json", "w") as f:
+            with open(RAW_JSON, "w") as f:
                 json.dump(export_data, f, indent=2)
 
         frame = draw_area(frame, rvec, tvec, rectangle_3d, camera_matrix, dist_coeffs)

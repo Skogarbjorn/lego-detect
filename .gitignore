@@ -1,5 +1,5 @@
 __pycache__/
 images/
-data.json
-camera_calibration.npz
+output/*
 aruco_test.py
+*.egg-info

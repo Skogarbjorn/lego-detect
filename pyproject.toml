@@ -1,0 +1,11 @@
+[project]
+name = "lego-detect"
+version = "0.1.0"
+dependencies = [
+"opencv-python",
+"pillow",
+"ultralytics"
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
