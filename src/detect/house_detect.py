@@ -1,60 +1,53 @@
 import cv2
+from lib.frame_grabber import FrameGrabber
 import numpy as np
 import os
+from ultralytics import YOLO
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(CURRENT_DIR, "..", "..", "models", "houses-model", "best.onnx")
+MODEL_PATH = os.path.join(CURRENT_DIR, "..", "..", "models", "houses-model", "best.pt")
 CLASS_NAMES = ['SingularHouse', 'ApartmentComplex']
-CONFIDENCE_THRESHOLD = 0.3
-NMS_THRESHOLD = 0.45
 INPUT_WIDTH = 640
 INPUT_HEIGHT = 640
 
-net = cv2.dnn.readNetFromONNX(MODEL_PATH)
+model = YOLO(MODEL_PATH)
 
 def detect_houses(frame):
-    original_height, original_width = frame.shape[:2]
-
-    blob = cv2.dnn.blobFromImage(frame, 1/255.0, (INPUT_WIDTH, INPUT_HEIGHT), swapRB=True, crop=False)
-    net.setInput(blob)
-
-    outputs = net.forward()[0]  
+    results = model(frame, verbose=False)
 
     boxes = []
     confidences = []
     class_ids = []
 
-    for row in outputs:
-        cx, cy, w, h = row[:4]
-        obj_conf = row[4]
-        class_scores = row[5:]
-        class_id = np.argmax(class_scores)
-        class_conf = class_scores[class_id]
+    for r in results:
+        for poly, conf, cls in zip(r.obb.xyxyxyxy, r.obb.conf, r.obb.cls):
+            poly_np = poly.cpu().numpy().reshape(4, 2).astype(int)
+            boxes.append(poly_np)
+            confidences.append(float(conf))
+            class_ids.append(int(cls))
+    return boxes, confidences, class_ids
 
-        confidence = obj_conf * class_conf
-        if confidence < CONFIDENCE_THRESHOLD:
+def draw_houses(frame, boxes, confidences, class_ids):
+    for poly, conf, cls_id in zip(boxes, confidences, class_ids):
+        cv2.polylines(frame, [poly], isClosed=True, color=(0, 255, 0), thickness=2)
+        label = f"{CLASS_NAMES[cls_id]}: {conf:.2f}"
+        cv2.putText(frame, label, tuple(poly[0]), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+    return frame
+
+if __name__ == "__main__":
+    grabber = FrameGrabber()
+    while True:
+        frame = grabber.read()
+        if frame is None:
             continue
 
-        
-        x = int((cx - w / 2) * original_width / INPUT_WIDTH)
-        y = int((cy - h / 2) * original_height / INPUT_HEIGHT)
-        w = int(w * original_width / INPUT_WIDTH)
-        h = int(h * original_height / INPUT_HEIGHT)
+        boxes, confidences, class_ids = detect_houses(frame)
 
-        boxes.append([x, y, w, h])
-        confidences.append(float(confidence))
-        class_ids.append(class_id)
+        draw_houses(frame, boxes, confidences, class_ids)
 
-    indices = cv2.dnn.NMSBoxes(boxes, confidences, CONFIDENCE_THRESHOLD, NMS_THRESHOLD)
+        cv2.imshow("path detection", frame)
+        if cv2.waitKey(1) & 0xFF == 27:
+            break
 
-    return (boxes, confidences, indices, class_ids)
-
-def draw_houses(frame, boxes, confidences, indices, class_ids):
-    for i in indices:
-        i = i[0] if isinstance(i, (tuple, list, np.ndarray)) else i
-        x, y, w, h = boxes[i]
-        class_id = class_ids[i]
-        label = f'{CLASS_NAMES[class_id]}: {confidences[i]:.2f}'
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-        cv2.putText(frame, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-    return frame
+    grabber.release()
+    cv2.destroyAllWindows()

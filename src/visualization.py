@@ -2,6 +2,7 @@ import tkinter as tk
 import cv2
 import json
 import os
+import sys
 from detect.detect import Detector
 from lib.frame_grabber import FrameGrabber
 from PIL import Image, ImageTk
@@ -19,6 +20,9 @@ annotating = False
 current_shape = []
 shapes = []
 original_image_size = None
+active_index = 0
+frames = []
+raw_data = {}
 
 def scale_point(x, y):
     sx = x * SCALE_X
@@ -42,11 +46,6 @@ def draw_houses(canvas, houses):
         canvas.create_oval(scx - r, scy - r, scx + r, scy + r, fill='red')
         canvas.create_polygon(*c1, *c2, *c3, *c4, outline="blue", width=2)
         canvas.create_text(scx + 10, scy, text=house['class'], anchor='w')
-
-def load_data():
-    with open(RAW_JSON, "r") as f:
-        return json.load(f)
-
 
 selected_shape_index = None
 shape_name_var = None
@@ -89,16 +88,6 @@ def delete_selected_shape():
         redraw_annotations()
         status_bar.config(text="Shape deleted")
 
-def start_annotation():
-    global annotating, current_shape
-    annotating = True
-    current_shape = []
-    annotate_button.config(state=tk.DISABLED)
-    done_button.config(state=tk.NORMAL)
-    new_shape_button.config(state=tk.NORMAL)
-    status_bar.config(text="Annotation started")
-    update_sidebar()
-
 def new_shape():
     global current_shape
     if current_shape:
@@ -111,6 +100,9 @@ def new_shape():
         status_bar.config(text="Started a new shape")
     update_sidebar()
 
+def complete_shape():
+    global current_shape
+
 def done_annotation():
     global annotating, current_shape, shapes
     annotating = False
@@ -122,27 +114,12 @@ def done_annotation():
             "name": f"Shape {shape_num}"  
         })
     
-    annotate_button.config(state=tk.NORMAL)
     done_button.config(state=tk.DISABLED)
     new_shape_button.config(state=tk.DISABLED)
     update_sidebar()
     
     status_bar.config(text="Annotation completed")
-    for i, shape in enumerate(shapes, 1):
-        name = shape.get('name', f"Shape {i}")
-        print(f"{name}")
-        for j, (x, y) in enumerate(shape['points'], 1):
-            print(f"  Point {j}: ({x}, {y})")
     detector.update_shapes(shapes)
-
-def clear_annotations():
-    global shapes, current_shape
-    shapes = []
-    current_shape = []
-    feed_canvas.delete("annotation")
-    status_bar.config(text="All annotations cleared")
-    update_sidebar()
-    print("All annotations cleared")
 
 def on_feed_click(event):
     if annotating:
@@ -170,15 +147,12 @@ def update_feed_image():
     global original_image_size
     
     try:
-        frame = grabber.read()
+        frame = frames[active_index]
         if frame is not None:
             if original_image_size is None:
                 original_image_size = (frame.shape[1], frame.shape[0])
 
-            
-            drawn_frame = detector.detect(frame)
-            
-            frame_rgb = cv2.cvtColor(drawn_frame, cv2.COLOR_BGR2RGB)
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             img_pil = Image.fromarray(frame_rgb)
             
             img_tk = ImageTk.PhotoImage(img_pil)
@@ -187,13 +161,76 @@ def update_feed_image():
             feed_canvas.create_image(0, 0, anchor=tk.NW, image=img_tk, tags="background")
             
             feed_canvas.config(width=img_pil.width, height=img_pil.height)
-            
-            redraw_annotations()
+
+            update_annotations()
             
     except Exception as e:
         print("Error updating feed:", e)
+
+def update_frames():
+    global frames
+
+    frames = []
+    for grabber in grabbers:
+        frame = grabber.read()
+        frames.append(frame)
+
+def update_detections():
+    global raw_data
+    raw_data = detector.detect(frames)
+
+def update_annotations():
+    global active_index, raw_data
+
+    canvas.delete("all")
+
+    area = raw_data["areas"][active_index]
+    houses = area["houses"]
+    markers = area["markers"]
+
+    for house in houses:
+        points = house["points"]
+        for i, point in enumerate(points):
+            r = 3
+            x,y = point
+            feed_canvas.create_oval(x - r, y - r, x + r, y + r, 
+                                   fill='red', tags="annotation")
+            if i > 0:
+                prev_x, prev_y = points[i-1]
+                feed_canvas.create_line(prev_x, prev_y, x, y, 
+                                      fill="red", width=2, tags="annotation")
+        if len(points) >= 3:
+            x1, y1 = points[0]
+            x2, y2 = points[-1]
+            feed_canvas.create_line(x1, y1, x2, y2, 
+                                  fill="red", width=2, tags="annotation")
+
+    for marker in markers:
+        pos = marker["position"]
+        x,y = pos
+        r = 5
+        feed_canvas.create_oval(x - r, y - r, x + r, y + r, 
+                               fill='green', tags="annotation")
+
+update_counter = 0
+def update_visual():
+    global update_counter
+    update_frames()
+    update_feed_image()
+    if (update_counter < 20):
+        update_counter += 1
+        update_detections()
+        detector.export()
+        refresh_data()
+    elif update_counter == 20:
+        update_counter += 1
+        detector.export()
+        refresh_data()
+    else:
+        detector.export_paths()
+        refresh_data()
     
-    root.after(100, update_feed_image)
+    root.after(100, update_visual)
 
 def redraw_annotations():
     feed_canvas.delete("annotation")
@@ -236,17 +273,18 @@ def refresh_data():
         mtime = os.path.getmtime(RAW_JSON)
         if last_mtime is None or mtime != last_mtime:
             last_mtime = mtime
-            data = load_data()
-            canvas.delete("all")
-            draw_area(canvas, data['area'])
-            draw_houses(canvas, data['houses'])
+            #update_annotations()
             
     except Exception as e:
         print("Error loading data:", e)
-    
-    root.after(1000, refresh_data)
 
-grabber = FrameGrabber()
+grabbers = []
+for i in range(1, len(sys.argv)):
+    grabber = FrameGrabber(sys.argv[i])
+    grabbers.append(grabber)
+if len(sys.argv) == 1:
+    grabbers.append(FrameGrabber())
+
 detector = Detector()
 
 root = tk.Tk()
@@ -303,22 +341,18 @@ delete_button.pack(fill=tk.X, padx=5, pady=5)
 button_frame = tk.Frame(left_frame)
 button_frame.pack(pady=10)
 
-annotate_button = tk.Button(button_frame, text="Start annotation", command=start_annotation)
-annotate_button.pack(side=tk.LEFT, padx=5)
-
 new_shape_button = tk.Button(button_frame, text="New shape", command=new_shape, state=tk.DISABLED)
 new_shape_button.pack(side=tk.LEFT, padx=5)
+
+complete_shape_button = tk.Button(button_frame, text="Complete shape", command=complete_shape, state=tk.DISABLED)
+complete_shape_button.pack(side=tk.LEFT, padx=5)
 
 done_button = tk.Button(button_frame, text="Done annotation", command=done_annotation, state=tk.DISABLED)
 done_button.pack(side=tk.LEFT, padx=5)
 
-clear_button = tk.Button(button_frame, text="Clear annotations", command=clear_annotations)
-clear_button.pack(side=tk.LEFT, padx=5)
-
 status_bar = tk.Label(root, text="Ready", bd=1, relief=tk.SUNKEN, anchor=tk.W)
 status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
-update_feed_image()
-refresh_data()
+update_visual()
 
 root.mainloop()

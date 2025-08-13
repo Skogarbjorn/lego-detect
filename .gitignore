@@ -3,3 +3,4 @@ images/
 output/*
 aruco_test.py
 *.egg-info
+farmed_images

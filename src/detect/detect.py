@@ -1,11 +1,13 @@
 import json
+import cv2
+from lib.frame_grabber import FrameGrabber
+from scipy.spatial.transform import Rotation
 import numpy as np
-from detect.house_detect import detect_houses, draw_houses, CLASS_NAMES
-from detect.area_detect import detect_area, draw_area
 import os
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-RAW_JSON = os.path.join(CURRENT_DIR, "..", "..", "output", "raw.json")
+#RAW_JSON = os.path.join(CURRENT_DIR, "..", "..", "output", "raw.json")
+
 camera_calibration_file = os.path.join(CURRENT_DIR, "..", "..", "misc", "camera_calibration.npz")
 
 data = np.load(camera_calibration_file)
@@ -16,80 +18,166 @@ class Detector:
     def __init__(self):
         self.annotated_houses = None
 
-    def convertToMarkerCoords(self, point, T_camera_to_marker):
-        x,y = point
-        x_norm = (x - camera_matrix[0,2]) / camera_matrix[0,0]
-        y_norm = (y - camera_matrix[1,2]) / camera_matrix[1,1]
+        self.T_history = []
+        self.markers_history = []
+        self.houses_history = []
+        self.paths_history = []
 
-        ray_camera = np.array([x_norm, y_norm, 1.0])
+    def export(self):
+        avg_T = self.export_T()
+        avg_markers = self.export_markers()
+        avg_houses = self.export_houses()
 
-        ray_marker = T_camera_to_marker[:3, :3] @ ray_camera
+        export_data = {
+            "areas": []
+        }
 
-        t = -T_camera_to_marker[2,3] / ray_marker[2]
-        p_marker = T_camera_to_marker[:3,3] + t * ray_marker
+        for i in range(len(avg_T)):
+            export_data["areas"].append({
+                "T": avg_T[i],
+                "markers": avg_markers[i],
+                "houses": avg_houses[i]
+            })
 
-        return p_marker
+        return export_data
 
-    def detect(self, frame):
-        rvec, tvec, rectangle_3d, T_camera_to_marker = detect_area(frame, camera_matrix, dist_coeffs)
-        boxes, confidences, indices, class_ids = detect_houses(frame)
+    def export_paths(self):
+        print("exporting only paths")
+    def export_T(self):
+        return [self.average_T(instance) for instance in zip(*self.T_history) if any(x is not None for x in instance)]
+    def export_markers(self):
+        return [self.average_markers(instance) for instance in zip(*self.markers_history)]
+    def export_houses(self):
+        return [self.average_houses(instance) for instance in zip(*self.houses_history)]
 
-        if len(indices) != 0:
-            frame = draw_houses(frame, boxes, confidences, indices, class_ids)
-        if rvec is None:
-            return frame
+    def detect(self, frames):
+        Ts = []
+        markers = []
+        houses = []
+        paths = []
 
-        export = True
+        for frame in frames:
+            ids, positions, T = detect_area(frame, camera_matrix, dist_coeffs)
+            boxes, confidences, class_ids = detect_houses(frame)
 
-        house_points_marker = []
-        if self.annotated_houses is not None:
-            for house in self.annotated_houses:
-                points = house['points']
-                name = house['name']
-
-                p_markers = [self.convertToMarkerCoords(point, T_camera_to_marker) for point in points]
-
-                house_points_marker.append((p_markers, name))
-        elif len(indices) != 0:
-            for index in indices:
-                index = index[0] if isinstance(index, (tuple, list, np.ndarray)) else index
-                x, y, w, h = boxes[index]
-                points = [
-                    (x, y),                  
-                    (x + w, y),              
-                    (x, y + h),              
-                    (x + w, y + h)           
-                ]
-
-                p_markers = [self.convertToMarkerCoords(point, T_camera_to_marker) for point in points]
-                class_name = CLASS_NAMES[class_ids[index]]
-
-                house_points_marker.append((p_markers, class_name))
-        else:
-            export = False
-
-        if export:
-            export_data = {
-                    "houses": [],
-                    "area": []
-                    }
-
-            for points, label in house_points_marker:
-                export_data["houses"].append({
-                    "class": label,
-                    "corners": [point.tolist() for point in points]
+            marker_data = []
+            if ids is not None and T is not None:
+                for id in ids:
+                    marker_data.append({
+                        "id": int(id),
+                        "position": [pos.tolist() for pos in positions[id]]
                     })
 
-            export_data["area"] = rectangle_3d.tolist()
 
-            with open(RAW_JSON, "w") as f:
-                json.dump(export_data, f, indent=2)
+            house_data = []
+            if len(boxes) != 0:
+                for i, box in enumerate(boxes):
+                    points = box.tolist()
+                    class_name = CLASS_NAMES[class_ids[i]]
+                    confidence = confidences[i]
 
-        frame = draw_area(frame, rvec, tvec, rectangle_3d, camera_matrix, dist_coeffs)
-        return frame
+                    house_data.append({
+                        "points": points, 
+                        "class": class_name, 
+                        "confidence": float(confidence)
+                    })
+
+            Ts.append(T)
+            markers.append(marker_data)
+            houses.append(house_data)
+
+        if len(self.T_history) >= 20:
+            self.T_history.pop(0)
+            self.markers_history.pop(0)
+            self.houses_history.pop(0)
+
+        self.T_history.append(Ts)
+        self.markers_history.append(markers)
+        self.houses_history.append(houses)
+
+        return self.export()
 
     def update_shapes(self, shapes):
         self.annotated_houses = shapes
 
+    def average_T(self, transforms):
+        translations = np.array([t[:3, 3] for t in transforms if t is not None])
+        avg_translation = np.mean(translations, axis=0)
+
+        rotations = [Rotation.from_matrix(t[:3, :3]) for t in transforms if t is not None]
+        quats = np.array([r.as_quat() for r in rotations])  
+
+        avg_quat = np.mean(quats, axis=0)
+        avg_quat /= np.linalg.norm(avg_quat)
+
+        avg_rotation = Rotation.from_quat(avg_quat).as_matrix()
+
+        avg_transform = np.eye(4)
+        avg_transform[:3, :3] = avg_rotation
+        avg_transform[:3, 3] = avg_translation
+
+        return avg_transform
+
+    def average_houses(self, history):
+        hits = []
+        for houses in history:
+            for house in houses:
+                hit = False
+                for i, targets in enumerate(hits):
+                    if self._inside(house, targets[-1]):
+                        hits[i].append(house)
+                        hit = True
+                if not hit:
+                    hits.append([house])
+        return [hit[-1] for hit in hits if len(hit) >= len(history) // 2]
+
+    def average_markers(self, history):
+        grouped = {}
+        for markers in history:
+            for marker in markers:
+                id = marker["id"]
+                if id not in grouped:
+                    grouped[id] = []
+                grouped[id].append(marker)
+
+        #counts = {k: len(v) for k, v in data.items()}
+        #max_count = max(counts.values())
+        #threshold = max_count * 0.5
+
+        #filtered = {k: v for k, v in data.items() if len(v) >= threshold}
+
+        averaged = []
+        for k, positions_list in grouped.items():
+            positions_array = np.array([p["position"] for p in positions_list])
+            mean_pos = positions_array.mean(axis=0)
+            averaged.append({"id": k, "position": mean_pos})
+        return averaged
+
+
+    def _inside(self, curr, target):
+        center = np.mean(np.array(curr["points"], dtype=float), axis=0)
+        return cv2.pointPolygonTest(np.array(target["points"], dtype=np.float32), center, False) >= 0
+
+
 if __name__ == "__main__":
-    print("todo!")
+    from house_detect import detect_houses, CLASS_NAMES
+    from area_detect import detect_area
+    grabber = FrameGrabber()
+    detector = Detector()
+    while True:
+        frame = grabber.read()
+        if frame is None:
+            continue
+
+        frames = detector.detect([frame])
+
+        cv2.imshow("gamer", frames[0])
+        key = cv2.waitKey(1) & 0xFF
+        if key == 27:
+            break
+    detector.export()
+
+    cv2.destroyAllWindows()
+else:
+    from detect.house_detect import detect_houses, CLASS_NAMES
+    from detect.area_detect import detect_area

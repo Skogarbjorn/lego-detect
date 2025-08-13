@@ -15,65 +15,57 @@ detector = cv2.aruco.ArucoDetector(dictionary, parameters)
 markerLength = 0.05
 half_len = markerLength / 2.0
 
+import numpy as np
+import cv2
+
 def detect_area(frame, camera_matrix, dist_coeffs):
     corners, ids, _ = detector.detectMarkers(frame)
 
-    if ids is not None:
-        ids = ids.flatten()
-        paired = list(zip(ids, corners))
-        paired.sort(key=lambda x: x[0])
-        _sorted_ids, sorted_corners = zip(*paired)
-        corners = list(sorted_corners)
+    if ids is None or len(ids) == 0:
+        return None, None, None
+
+    ids = ids.flatten()
+    paired = list(zip(ids, corners))
+    paired.sort(key=lambda x: x[0])
+    sorted_ids, sorted_corners = zip(*paired)
+    ids = list(sorted_ids)
+    corners = list(sorted_corners)
 
     objPoints = np.array([
         [[-half_len,  half_len, 0.0]],
         [[ half_len,  half_len, 0.0]],
         [[ half_len, -half_len, 0.0]],
         [[-half_len, -half_len, 0.0]]
-        ], dtype=np.float32)
+    ], dtype=np.float32)
 
-    rvecs = [None]*len(corners)
-    tvecs = [None]*len(corners)
+    positions = {}
+    T_camera_to_marker = None
 
     for i in range(len(corners)):
-        _, rvecs[i], tvecs[i] = cv2.solvePnP(
-                objPoints, 
-                corners[i], 
-                camera_matrix,
-                dist_coeffs)
+        _, rvec, tvec = cv2.solvePnP(
+            objPoints,
+            corners[i],
+            camera_matrix,
+            dist_coeffs
+        )
 
-    if len(corners) >= 2:
-        R1, _ = cv2.Rodrigues(rvecs[0])
-        t1 = tvecs[0].reshape(3,1)
+        img_pts, _ = cv2.projectPoints(
+            np.array([[0, 0, 0]], dtype=np.float32),  
+            rvec,
+            tvec,
+            camera_matrix,
+            dist_coeffs
+        )
 
-        T_marker1_to_camera = np.eye(4)
-        T_marker1_to_camera[:3, :3] = R1
-        T_marker1_to_camera[:3, 3] = t1[:, 0]
-        T_camera_to_marker1 = np.linalg.inv(T_marker1_to_camera)
+        positions[ids[i]] = tuple(img_pts[0].ravel())
 
-        R2, _ = cv2.Rodrigues(rvecs[1])
-        t2 = tvecs[1].reshape(3,1)
+        if i == 0:
+            R, _ = cv2.Rodrigues(rvec)
+            T_camera_to_marker = np.eye(4, dtype=np.float32)
+            T_camera_to_marker[:3, :3] = R
+            T_camera_to_marker[:3, 3] = tvec.flatten()
 
-        T_marker2_to_camera = np.eye(4)
-        T_marker2_to_camera[:3, :3] = R2
-        T_marker2_to_camera[:3, 3] = t2[:, 0]
-
-        T_marker2_in_marker1 = T_camera_to_marker1 @ T_marker2_to_camera
-
-        pos_in_marker1 = T_marker2_in_marker1[:3, 3]
-
-        pA = np.array([0,0,0], dtype=np.float32)
-        pB = pos_in_marker1
-
-        p0 = np.array([pA[0], pA[1], 0])
-        p1 = np.array([pB[0], pA[1], 0])
-        p2 = np.array([pB[0], pB[1], 0])
-        p3 = np.array([pA[0], pB[1], 0])
-
-        rectangle_3d = np.array([p0, p1, p2, p3], dtype=np.float32)
-
-        return (rvecs[0], tvecs[0], rectangle_3d, T_camera_to_marker1)
-    return (None, None, None, None)
+    return ids, positions, T_camera_to_marker
 
 def draw_area(frame, rvec, tvec, rectangle_3d, camera_matrix, dist_coeffs):
     if rvec is None or tvec is None or rectangle_3d is None:
@@ -99,10 +91,9 @@ if __name__ == "__main__":
         if frame is None:
             continue
 
-        rvec, tvec, rectangle_3d, T_camera_to_marker = detect_area(frame, camera_matrix, dist_coeffs)
-        drawn_frame = draw_area(frame, rvec, tvec, rectangle_3d, camera_matrix, dist_coeffs)
+        detect_area(frame, camera_matrix, dist_coeffs)
 
-        cv2.imshow("area detect", drawn_frame)
+        cv2.imshow("area detect", frame)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
