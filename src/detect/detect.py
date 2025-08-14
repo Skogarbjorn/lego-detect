@@ -27,6 +27,7 @@ class Detector:
         avg_T = self.export_T()
         avg_markers = self.export_markers()
         avg_houses = self.export_houses()
+        avg_paths = self.export_paths()
 
         export_data = {
             "areas": []
@@ -36,13 +37,14 @@ class Detector:
             export_data["areas"].append({
                 "T": avg_T[i],
                 "markers": avg_markers[i],
-                "houses": avg_houses[i]
+                "houses": avg_houses[i],
+                "paths": avg_paths[i]
             })
 
         return export_data
 
     def export_paths(self):
-        print("exporting only paths")
+        return [self.average_paths(instance) for instance in zip(*self.paths_history)]
     def export_T(self):
         return [self.average_T(instance) for instance in zip(*self.T_history) if any(x is not None for x in instance)]
     def export_markers(self):
@@ -50,13 +52,37 @@ class Detector:
     def export_houses(self):
         return [self.average_houses(instance) for instance in zip(*self.houses_history)]
 
+    def detect_paths(self, frames):
+        paths = []
+        for frame in frames:
+            path_data = []
+            boxes = detect_paths(frame)
+            
+            if len(boxes) != 0:
+                for box in boxes:
+                    path_data.append({
+                        "points": box
+                    })
+
+            paths.append(path_data)
+
+        if len(self.T_history) >= 20:
+            self.paths_history.pop(0)
+
+        self.paths_history.append(paths)
+
+        return self.export_paths()
+
     def detect(self, frames):
         Ts = []
         markers = []
         houses = []
-        paths = []
+
+        self.detect_paths(frames)
 
         for frame in frames:
+            if frame is None:
+                continue
             ids, positions, T = detect_area(frame, camera_matrix, dist_coeffs)
             boxes, confidences, class_ids = detect_houses(frame)
 
@@ -118,6 +144,13 @@ class Detector:
 
         return avg_transform
 
+    def average_paths(self, history):
+        gamer = []
+        for paths in history:
+            for path in paths:
+                gamer.append(path)
+        return gamer
+
     def average_houses(self, history):
         hits = []
         for houses in history:
@@ -162,6 +195,7 @@ class Detector:
 if __name__ == "__main__":
     from house_detect import detect_houses, CLASS_NAMES
     from area_detect import detect_area
+    from path_detect import detect_paths
     grabber = FrameGrabber()
     detector = Detector()
     while True:
@@ -181,3 +215,4 @@ if __name__ == "__main__":
 else:
     from detect.house_detect import detect_houses, CLASS_NAMES
     from detect.area_detect import detect_area
+    from detect.path_detect import detect_paths

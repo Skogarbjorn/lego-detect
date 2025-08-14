@@ -1,6 +1,5 @@
 import tkinter as tk
 import cv2
-import json
 import os
 import sys
 from detect.detect import Detector
@@ -187,6 +186,22 @@ def update_annotations():
     area = raw_data["areas"][active_index]
     houses = area["houses"]
     markers = area["markers"]
+    paths = area["paths"]
+
+    for path in paths:
+        points = path["points"]
+        for i, point in enumerate(points):
+            r = 3
+            x,y = point
+            if i > 0:
+                prev_x, prev_y = points[i-1]
+                feed_canvas.create_line(prev_x, prev_y, x, y, 
+                                      fill="yellow", width=2, tags="annotation")
+        if len(points) >= 3:
+            x1, y1 = points[0]
+            x2, y2 = points[-1]
+            feed_canvas.create_line(x1, y1, x2, y2, 
+                                  fill="yellow", width=2, tags="annotation")
 
     for house in houses:
         points = house["points"]
@@ -210,7 +225,7 @@ def update_annotations():
         x,y = pos
         r = 5
         feed_canvas.create_oval(x - r, y - r, x + r, y + r, 
-                               fill='green', tags="annotation")
+                               fill='blue', tags="annotation")
 
 update_counter = 0
 def update_visual():
@@ -227,7 +242,7 @@ def update_visual():
         detector.export()
         refresh_data()
     else:
-        detector.export_paths()
+        #detector.export_paths()
         refresh_data()
     
     root.after(100, update_visual)
