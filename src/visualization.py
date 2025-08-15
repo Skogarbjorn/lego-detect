@@ -7,7 +7,6 @@ from lib.frame_grabber import FrameGrabber
 from PIL import Image, ImageTk
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-RAW_JSON = os.path.join(CURRENT_DIR, "..", "output", "raw.json")
 
 CANVAS_WIDTH = 500
 CANVAS_HEIGHT = 500
@@ -142,15 +141,25 @@ def on_feed_click(event):
             feed_canvas.create_line(x1, y1, x2, y2, 
                                   fill='green', width=2, tags="annotation")
 
+def prev_frame():
+    global active_index
+    if active_index == 0:
+        active_index = len(grabbers) - 1
+    else:
+        active_index -= 1
+
+def next_frame():
+    global active_index
+    if active_index == len(grabbers) - 1:
+        active_index = 0
+    else:
+        active_index += 1
+
 def update_feed_image():
-    global original_image_size
-    
+    global frames, active_index
     try:
         frame = frames[active_index]
         if frame is not None:
-            if original_image_size is None:
-                original_image_size = (frame.shape[1], frame.shape[0])
-
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             img_pil = Image.fromarray(frame_rgb)
             
@@ -158,7 +167,7 @@ def update_feed_image():
             
             feed_canvas.img_tk = img_tk  
             feed_canvas.create_image(0, 0, anchor=tk.NW, image=img_tk, tags="background")
-            
+
             feed_canvas.config(width=img_pil.width, height=img_pil.height)
 
             update_annotations()
@@ -175,8 +184,14 @@ def update_frames():
         frames.append(frame)
 
 def update_detections():
-    global raw_data
+    global raw_data, frames
     raw_data = detector.detect(frames)
+
+def update_path_detections():
+    global raw_data, frames
+    paths = detector.detect_paths(frames)
+    for i, area in enumerate(raw_data["areas"]):
+        area["paths"] = paths[i]
 
 def update_annotations():
     global active_index, raw_data
@@ -231,19 +246,12 @@ update_counter = 0
 def update_visual():
     global update_counter
     update_frames()
-    update_feed_image()
     if (update_counter < 20):
         update_counter += 1
         update_detections()
-        detector.export()
-        refresh_data()
-    elif update_counter == 20:
-        update_counter += 1
-        detector.export()
-        refresh_data()
     else:
-        #detector.export_paths()
-        refresh_data()
+        update_path_detections()
+    update_feed_image()
     
     root.after(100, update_visual)
 
@@ -284,23 +292,23 @@ def redraw_annotations():
 def refresh_data():
     global last_mtime
     
-    try:
-        mtime = os.path.getmtime(RAW_JSON)
-        if last_mtime is None or mtime != last_mtime:
-            last_mtime = mtime
-            #update_annotations()
-            
-    except Exception as e:
-        print("Error loading data:", e)
+    #try:
+    #    mtime = os.path.getmtime(RAW_JSON)
+    #    if last_mtime is None or mtime != last_mtime:
+    #        last_mtime = mtime
+    #        update_annotations()
+    #        
+    #except Exception as e:
+    #    print("Error loading data:", e)
 
 grabbers = []
 for i in range(1, len(sys.argv)):
-    grabber = FrameGrabber(sys.argv[i])
+    grabber = FrameGrabber(int(sys.argv[i]))
     grabbers.append(grabber)
 if len(sys.argv) == 1:
     grabbers.append(FrameGrabber())
 
-detector = Detector()
+detector = Detector(len(grabbers))
 
 root = tk.Tk()
 root.title("visualization")
@@ -314,6 +322,14 @@ right_frame.pack(side=tk.RIGHT, padx=10, pady=10, fill=tk.BOTH, expand=True)
 
 canvas = tk.Canvas(right_frame, width=CANVAS_WIDTH, height=CANVAS_HEIGHT, bg='white')
 canvas.pack(fill=tk.BOTH, expand=True, pady=10)
+
+frame_buttons = tk.Frame(left_frame)
+frame_buttons.pack(pady=10)
+
+frame_left = tk.Button(frame_buttons, text="left", command=prev_frame)
+frame_left.pack(fill=tk.X, padx=5, pady=5)
+frame_right = tk.Button(frame_buttons, text="right", command=next_frame)
+frame_right.pack(fill=tk.X, padx=5, pady=5)
 
 feed_frame = tk.LabelFrame(left_frame, text="Video Feed")
 feed_frame.pack(fill=tk.BOTH, expand=True, pady=10)

@@ -1,7 +1,7 @@
 import cv2
 import threading
 
-url = "http://192.168.0.5:4747/video"
+url = 2
 
 class FrameGrabber:
     def __init__(self, src=url):

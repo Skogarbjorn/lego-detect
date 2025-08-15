@@ -8,6 +8,8 @@ import os
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 #RAW_JSON = os.path.join(CURRENT_DIR, "..", "..", "output", "raw.json")
 
+HISTORY_LENGTH = 5
+
 camera_calibration_file = os.path.join(CURRENT_DIR, "..", "..", "misc", "camera_calibration.npz")
 
 data = np.load(camera_calibration_file)
@@ -15,8 +17,8 @@ camera_matrix = data["camera_matrix"]
 dist_coeffs = data["dist_coeffs"]
 
 class Detector:
-    def __init__(self):
-        self.annotated_houses = None
+    def __init__(self, num_cameras):
+        self.num_cameras = num_cameras
 
         self.T_history = []
         self.markers_history = []
@@ -33,18 +35,19 @@ class Detector:
             "areas": []
         }
 
-        for i in range(len(avg_T)):
+        for i in range(self.num_cameras):
             export_data["areas"].append({
-                "T": avg_T[i],
-                "markers": avg_markers[i],
-                "houses": avg_houses[i],
-                "paths": avg_paths[i]
+                "T": avg_T[i] if i < len(avg_T) else [],
+                "markers": avg_markers[i] if i < len(avg_markers) else [],
+                "houses": avg_houses[i] if i < len(avg_houses) else [],
+                "paths": avg_paths[i] if i < len(avg_paths) else []
             })
 
         return export_data
 
     def export_paths(self):
-        return [self.average_paths(instance) for instance in zip(*self.paths_history)]
+        gamer = [self.average_paths(instance) for instance in zip(*self.paths_history)]
+        return gamer
     def export_T(self):
         return [self.average_T(instance) for instance in zip(*self.T_history) if any(x is not None for x in instance)]
     def export_markers(self):
@@ -55,6 +58,8 @@ class Detector:
     def detect_paths(self, frames):
         paths = []
         for frame in frames:
+            if frame is None:
+                continue
             path_data = []
             boxes = detect_paths(frame)
             
@@ -66,7 +71,7 @@ class Detector:
 
             paths.append(path_data)
 
-        if len(self.T_history) >= 20:
+        if len(self.paths_history) >= HISTORY_LENGTH:
             self.paths_history.pop(0)
 
         self.paths_history.append(paths)
@@ -81,6 +86,7 @@ class Detector:
         self.detect_paths(frames)
 
         for frame in frames:
+            print(frame)
             if frame is None:
                 continue
             ids, positions, T = detect_area(frame, camera_matrix, dist_coeffs)
@@ -112,16 +118,20 @@ class Detector:
             markers.append(marker_data)
             houses.append(house_data)
 
-        if len(self.T_history) >= 20:
+        if len(self.T_history) >= HISTORY_LENGTH:
             self.T_history.pop(0)
+        if len(self.markers_history) >= HISTORY_LENGTH:
             self.markers_history.pop(0)
+        if len(self.houses_history) >= HISTORY_LENGTH:
             self.houses_history.pop(0)
 
         self.T_history.append(Ts)
         self.markers_history.append(markers)
         self.houses_history.append(houses)
 
-        return self.export()
+        gamer = self.export()
+        print(gamer)
+        return gamer
 
     def update_shapes(self, shapes):
         self.annotated_houses = shapes
@@ -145,11 +155,17 @@ class Detector:
         return avg_transform
 
     def average_paths(self, history):
-        gamer = []
+        hits = []
         for paths in history:
             for path in paths:
-                gamer.append(path)
-        return gamer
+                hit = False
+                for i, targets in enumerate(hits):
+                    if self._paths_overlap(path, targets[-1]):
+                        hits[i].append(path)
+                        hit = True
+                if not hit:
+                    hits.append([path])
+        return [hit[-1] for hit in hits if len(hit) >= 2]
 
     def average_houses(self, history):
         hits = []
@@ -190,6 +206,49 @@ class Detector:
     def _inside(self, curr, target):
         center = np.mean(np.array(curr["points"], dtype=float), axis=0)
         return cv2.pointPolygonTest(np.array(target["points"], dtype=np.float32), center, False) >= 0
+
+    def _get_path_properties(self, path):
+        center = np.mean(path, axis=0)
+
+        # Calculate edge vectors
+        edges = path[1:] - path[:-1]
+        edges = np.vstack((edges, path[0] - path[-1]))
+
+        # Find the two unique edge lengths (for rectangle)
+        edge_lengths = np.linalg.norm(edges, axis=1)
+        unique_lengths = np.unique(edge_lengths)
+
+        # Get min dimension (smaller side of rectangle)
+        min_dim = np.min(unique_lengths)
+
+        # Calculate rotation (angle of first edge)
+        rotation = np.arctan2(edges[0][1], edges[0][0])
+
+        return center, min_dim, rotation
+
+    def _paths_overlap(self, path1, path2, position_threshold=0.8, rotation_threshold=0.2):
+        """
+        Check if two rectangles overlap based on:
+            1. Center distance within 20% of min dimension
+        2. Rotation difference within 20% margin
+        """
+        # Get properties for both rectangles
+        center1, min_dim1, rot1 = self._get_path_properties(path1["points"])
+        center2, min_dim2, rot2 = self._get_path_properties(path2["points"])
+
+        # Use average min dimension as reference size
+        avg_min_dim = (min_dim1 + min_dim2) / 2
+
+        # Check position similarity
+        distance = np.linalg.norm(center1 - center2)
+        position_ok = distance < (position_threshold * avg_min_dim)
+
+        # Check rotation similarity (handle angle wrap-around)
+        angle_diff = np.abs(rot1 - rot2)
+        angle_diff = min(angle_diff, 2*np.pi - angle_diff)  # Smallest angle difference
+        rotation_ok = angle_diff < (rotation_threshold * np.pi)
+
+        return position_ok and rotation_ok
 
 
 if __name__ == "__main__":
