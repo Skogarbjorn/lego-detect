@@ -210,40 +210,27 @@ class Detector:
     def _get_path_properties(self, path):
         center = np.mean(path, axis=0)
 
-        # Calculate edge vectors
         edges = path[1:] - path[:-1]
         edges = np.vstack((edges, path[0] - path[-1]))
 
-        # Find the two unique edge lengths (for rectangle)
         edge_lengths = np.linalg.norm(edges, axis=1)
         unique_lengths = np.unique(edge_lengths)
 
-        # Get min dimension (smaller side of rectangle)
         min_dim = np.min(unique_lengths)
 
-        # Calculate rotation (angle of first edge)
         rotation = np.arctan2(edges[0][1], edges[0][0])
 
         return center, min_dim, rotation
 
     def _paths_overlap(self, path1, path2, position_threshold=0.8, rotation_threshold=0.2):
-        """
-        Check if two rectangles overlap based on:
-            1. Center distance within 20% of min dimension
-        2. Rotation difference within 20% margin
-        """
-        # Get properties for both rectangles
         center1, min_dim1, rot1 = self._get_path_properties(path1["points"])
         center2, min_dim2, rot2 = self._get_path_properties(path2["points"])
 
-        # Use average min dimension as reference size
         avg_min_dim = (min_dim1 + min_dim2) / 2
 
-        # Check position similarity
         distance = np.linalg.norm(center1 - center2)
         position_ok = distance < (position_threshold * avg_min_dim)
 
-        # Check rotation similarity (handle angle wrap-around)
         angle_diff = np.abs(rot1 - rot2)
         angle_diff = min(angle_diff, 2*np.pi - angle_diff)  # Smallest angle difference
         rotation_ok = angle_diff < (rotation_threshold * np.pi)
