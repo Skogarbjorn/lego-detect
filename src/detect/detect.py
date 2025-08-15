@@ -6,7 +6,6 @@ import numpy as np
 import os
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-#RAW_JSON = os.path.join(CURRENT_DIR, "..", "..", "output", "raw.json")
 
 HISTORY_LENGTH = 5
 
@@ -232,7 +231,7 @@ class Detector:
         position_ok = distance < (position_threshold * avg_min_dim)
 
         angle_diff = np.abs(rot1 - rot2)
-        angle_diff = min(angle_diff, 2*np.pi - angle_diff)  # Smallest angle difference
+        angle_diff = min(angle_diff, 2*np.pi - angle_diff) 
         rotation_ok = angle_diff < (rotation_threshold * np.pi)
 
         return position_ok and rotation_ok
