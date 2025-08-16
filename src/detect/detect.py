@@ -36,7 +36,7 @@ class Detector:
 
         for i in range(self.num_cameras):
             export_data["areas"].append({
-                "T": avg_T[i] if i < len(avg_T) else [],
+                "T": avg_T[i] if i < len(avg_T) else np.array([]),
                 "markers": avg_markers[i] if i < len(avg_markers) else [],
                 "houses": avg_houses[i] if i < len(avg_houses) else [],
                 "paths": avg_paths[i] if i < len(avg_paths) else []
@@ -85,7 +85,6 @@ class Detector:
         self.detect_paths(frames)
 
         for frame in frames:
-            print(frame)
             if frame is None:
                 continue
             ids, positions, T = detect_area(frame, camera_matrix, dist_coeffs)
@@ -128,14 +127,13 @@ class Detector:
         self.markers_history.append(markers)
         self.houses_history.append(houses)
 
-        gamer = self.export()
-        print(gamer)
-        return gamer
+        return self.export()
 
     def update_shapes(self, shapes):
         self.annotated_houses = shapes
 
     def average_T(self, transforms):
+        #return transforms[-1]
         translations = np.array([t[:3, 3] for t in transforms if t is not None])
         avg_translation = np.mean(translations, axis=0)
 
@@ -180,6 +178,7 @@ class Detector:
         return [hit[-1] for hit in hits if len(hit) >= len(history) // 2]
 
     def average_markers(self, history):
+        #return history[-1]
         grouped = {}
         for markers in history:
             for marker in markers:

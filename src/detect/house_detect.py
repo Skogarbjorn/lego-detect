@@ -11,7 +11,7 @@ INPUT_WIDTH = 640
 INPUT_HEIGHT = 640
 
 model = YOLO(MODEL_PATH)
-model.to("cpu")
+#model.to("cpu")
 
 def detect_houses(frame):
     results = model(frame, verbose=False)

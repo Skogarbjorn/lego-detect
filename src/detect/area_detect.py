@@ -1,4 +1,5 @@
 import cv2
+import numpy as np
 import os
 import cv2.aruco as aruco
 import numpy as np
@@ -12,7 +13,7 @@ parameters.cornerRefinementWinSize = 5
 parameters.cornerRefinementMaxIterations = 100
 detector = cv2.aruco.ArucoDetector(dictionary, parameters)
 
-markerLength = 0.05
+markerLength = 6
 half_len = markerLength / 2.0
 
 import numpy as np
@@ -39,7 +40,7 @@ def detect_area(frame, camera_matrix, dist_coeffs):
     ], dtype=np.float32)
 
     positions = {}
-    T_camera_to_marker = None
+    T_marker_to_camera = None
 
     for i in range(len(corners)):
         _, rvec, tvec = cv2.solvePnP(
@@ -61,11 +62,11 @@ def detect_area(frame, camera_matrix, dist_coeffs):
 
         if i == 0:
             R, _ = cv2.Rodrigues(rvec)
-            T_camera_to_marker = np.eye(4, dtype=np.float32)
-            T_camera_to_marker[:3, :3] = R
-            T_camera_to_marker[:3, 3] = tvec.flatten()
+            T_marker_to_camera = np.eye(4, dtype=np.float32)
+            T_marker_to_camera[:3, :3] = R
+            T_marker_to_camera[:3, 3] = tvec.flatten()
 
-    return ids, positions, T_camera_to_marker
+    return ids, positions, np.linalg.inv(T_marker_to_camera)
 
 def draw_area(frame, rvec, tvec, rectangle_3d, camera_matrix, dist_coeffs):
     if rvec is None or tvec is None or rectangle_3d is None:

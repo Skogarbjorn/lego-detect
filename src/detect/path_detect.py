@@ -2,13 +2,12 @@ import os
 from ultralytics import YOLO
 import cv2
 from lib.frame_grabber import FrameGrabber
-import torch
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(CURRENT_DIR, "..", "..", "models", "path-model", "best.pt")
 
 model = YOLO(MODEL_PATH) 
-model.to("cpu")
+#model.to("cpu")
 
 def detect_paths(frame):
     results = model(frame, verbose=False)
