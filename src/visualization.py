@@ -12,8 +12,12 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 CANVAS_WIDTH = 500
 CANVAS_HEIGHT = 500
-SCALE_X = CANVAS_WIDTH
-SCALE_Y = CANVAS_HEIGHT
+PADDING_X = CANVAS_WIDTH // 10
+PADDING_Y = CANVAS_HEIGHT // 10
+min_x = 0
+min_y = 0
+max_x = 0
+max_y = 0
 
 last_mtime = None
 annotating = False
@@ -22,29 +26,63 @@ original_image_size = None
 active_index = 0
 frames = []
 raw_data = {}
+combined_data = {}
 
-def scale_point(x, y):
-    sx = x * SCALE_X
-    sy = (1 - y) * SCALE_Y
-    return sx, sy
+def draw():
+    global min_x, min_y, max_x, max_y
 
-def draw_area(canvas, area):
-    points = []
-    for x, y, _ in area:
-        sx, sy = scale_point(x, y)
-        points.extend([sx, sy])
-    canvas.create_polygon(points, outline='blue', fill='', width=2)
+    if combined_data:
+        markers = combined_data["markers"]
+        houses = combined_data["houses"]
+        paths = combined_data["paths"]
+        min_x, min_y = markers[0]["position"] if len(markers) > 0 else (0,0)
+        max_x, max_y = min_x, min_y
+        for marker in markers[1:]:
+            x,y = marker["position"]
 
-def draw_houses(canvas, houses):
+            if x < min_x:
+                min_x = x
+            if y < min_y:
+                min_y = y
+            if x > max_x:
+                max_x = x
+            if y > max_y:
+                max_y = y
+
+        canvas.delete('all')
+
+        draw_markers(markers)
+        draw_houses(houses)
+        draw_paths(paths)
+
+def scale_point(point):
+    x,y = point
+    sx = (x - min_x) * (CANVAS_WIDTH - PADDING_X * 2) / (max_x - min_x) + PADDING_X
+    sy = (y - min_y) * (CANVAS_HEIGHT - PADDING_Y * 2) / (max_y - min_y) + PADDING_Y
+    return (sx, sy)
+
+def draw_markers(markers):
+    for marker in markers:
+        pos = marker["position"]
+        sx, sy = scale_point(pos)
+        r = 5
+        canvas.create_oval(sx - r, sy - r, sx + r, sy + r, fill='red')
+        canvas.create_text(sx + 10, sy, text=marker["id"], anchor='w')
+
+def draw_paths(paths):
+    for path in paths:
+        c1, c2, c3, c4 = path['points']
+        canvas.create_polygon(*scale_point(c1), *scale_point(c2), *scale_point(c3), *scale_point(c4), outline="yellow", width=0, fill='yellow')
+
+def draw_houses(houses):
     for house in houses:
-        c1, c2, c3, c4 = house['corners']
+        c1, c2, c3, c4 = house['points']
         cx = (c1[0] + c2[0] + c3[0] + c4[0]) / 4
         cy = (c1[1] + c2[1] + c3[1] + c4[1]) / 4
-        scx, scy = scale_point(cx, cy)
         r = 5
-        canvas.create_oval(scx - r, scy - r, scx + r, scy + r, fill='red')
-        canvas.create_polygon(*c1, *c2, *c3, *c4, outline="blue", width=2)
-        canvas.create_text(scx + 10, scy, text=house['class'], anchor='w')
+        #canvas.create_oval(scx - r, scy - r, scx + r, scy + r, fill='red')
+        canvas.create_polygon(*scale_point(c1), *scale_point(c2), *scale_point(c3), *scale_point(c4), outline="blue", width=2, fill='')
+        #canvas.create_text(scx + 10, scy, text=house['class'], anchor='w')
 
 selected_shape_index = None
 
@@ -66,6 +104,7 @@ def on_shape_select(_event):
     selection = sidebar_list.curselection()
     if selection:
         selected_shape_index = selection[0]
+        print(selected_shape_index)
         shape_name_var.set(houses[selected_shape_index]["class"])
         update_annotations()
 
@@ -79,13 +118,12 @@ def update_shape_name(_event):
         update_sidebar()
 
 def delete_selected_shape():
-    global selected_shape_index, shapes
-    if selected_shape_index is not None and shapes:
-        del shapes[selected_shape_index]
+    global selected_shape_index, raw_data
+    if selected_shape_index is not None:
+        del raw_data["areas"][active_index]["houses"][selected_shape_index]
         selected_shape_index = None
         update_sidebar()
         update_annotations()
-        status_bar.config(text="Shape deleted")
 
 def new_shape():
     global current_shape
@@ -247,9 +285,12 @@ def loop():
     root.after(100, loop)
 
 def interpret():
+    global combined_data
     converted = convert(raw_data)
     combined = combine(converted)
-    print(combined)
+    combined_data = combined
+
+    draw()
 
     #export
     root.after(1000, interpret)
