@@ -1,10 +1,13 @@
 import tkinter as tk
+import networkx as nx
 import cv2
 import os
 import sys
 from detect.detect import Detector
+from interpret import export
 from interpret.combine import combine
 from interpret.convert import convert
+from interpret.export import calculate_connections
 from lib.frame_grabber import FrameGrabber
 from PIL import Image, ImageTk
 
@@ -281,7 +284,6 @@ def loop():
         update_sidebar()
         update_annotations("path")
     
-    print("filler")
     root.after(100, loop)
 
 def interpret():
@@ -289,6 +291,15 @@ def interpret():
     converted = convert(raw_data)
     combined = combine(converted)
     combined_data = combined
+
+    G = calculate_connections(combined_data)
+    connected_houses = []
+    for component in nx.connected_components(G):
+        houses_in_component = [n for n in component if G.nodes[n]["kind"]=="house"]
+        if len(houses_in_component) > 1:
+            connected_houses.append(houses_in_component)
+
+    print(connected_houses)
 
     draw()
 
