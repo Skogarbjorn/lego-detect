@@ -61,7 +61,7 @@ def draw():
 def scale_point(point):
     x,y = point
     sx = (x - min_x) * (CANVAS_WIDTH - PADDING_X * 2) / (max_x - min_x) + PADDING_X
-    sy = (y - min_y) * (CANVAS_HEIGHT - PADDING_Y * 2) / (max_y - min_y) + PADDING_Y
+    sy = (max_y - y) * (CANVAS_HEIGHT - PADDING_Y * 2) / (max_y - min_y) + PADDING_Y
     return (sx, sy)
 
 def draw_markers(markers):
