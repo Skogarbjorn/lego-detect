@@ -4,7 +4,10 @@ version = "0.1.0"
 dependencies = [
 "opencv-python",
 "pillow",
-"ultralytics"
+"ultralytics",
+"networkx",
+"scipy",
+"shapely"
 ]
 
 [tool.setuptools]
