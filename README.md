@@ -14,7 +14,7 @@ Everything is set up in a python project so `pip install -e .` should install al
 
 # Running
 
-`visualization.py` is the entry point should be called with the links to camera feeds as arguments, i.e. 0 for `/dev/video0` or an ip string if sourcing from an online feed.
+`visualization.py` is the entry point and should be called with the links to camera feeds as arguments, i.e. 0 for `/dev/video0` or an ip string if sourcing from an online feed.
 
 For 2 local cameras, you would call `python -m visualization 0 1` if the cameras are mounted as `/dev/video0` and `/dev/video1`.
 (i dont know how cameras work on windows, so refer to the opencv documentation for `cv2.VideoCapture`)
